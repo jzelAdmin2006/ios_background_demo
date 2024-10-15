@@ -6,143 +6,137 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+FlutterLocalNotificationsPlugin();
 
+int notificationId = 1;
 
-final FlutterLocalNotificationsPlugin flutterLocalPlugin =FlutterLocalNotificationsPlugin();
-const AndroidNotificationChannel notificationChannel=AndroidNotificationChannel(
-    "coding is life foreground",
-    "coding is life foreground service",
-    description: "This is channel des....",
-    importance: Importance.high
-);
-
-
-void main() async{
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await initservice();
-  runApp(const MyApp());
+
+  runApp(const App());
+  Future.wait([initializeService(), initNotifications()]);
 }
 
-Future<void> initservice()async{
-  var service=FlutterBackgroundService();
-  //set for ios
-  if(Platform.isIOS){
-    await flutterLocalPlugin.initialize(const InitializationSettings(
-        iOS: DarwinInitializationSettings()
-    ));
+Future<void> initNotifications() async {
+  await flutterLocalNotificationsPlugin.initialize(const InitializationSettings(
+      android: AndroidInitializationSettings('mipmap/ic_launcher'),
+      iOS: DarwinInitializationSettings()));
+  await _requestPermissions();
+}
+
+Future<void> _requestPermissions() async {
+  if (Platform.isIOS) {
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+        IOSFlutterLocalNotificationsPlugin>()
+        ?.requestPermissions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+  } else if (Platform.isAndroid) {
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
   }
-
-  await flutterLocalPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(notificationChannel);
-
-  //service init and start
-  await service.configure(
-      iosConfiguration: IosConfiguration(
-          onBackground: iosBackground,
-          onForeground: onStart
-      ),
-      androidConfiguration: AndroidConfiguration(
-          onStart: onStart,
-          autoStart: true,
-          isForegroundMode: true,
-          notificationChannelId: "coding is life",
-          initialNotificationTitle: "Coding is life",
-          initialNotificationContent: "Awsome Content",
-          foregroundServiceNotificationId: 90
-      )
-  );
-  service.startService();
-
-  //for ios enable background fetch from add capability inside background mode
-
 }
 
-//onstart method
-@pragma("vm:enry-point")
-void onStart(ServiceInstance service){
+Future<void> initializeService() async {
+  final service = FlutterBackgroundService();
+  if (!(await service.isRunning())) {
+    await service.configure(
+      androidConfiguration: AndroidConfiguration(
+        autoStart: true,
+        onStart: onStart,
+        isForegroundMode: true,
+      ),
+      iosConfiguration: IosConfiguration(
+        autoStart: true,
+        onForeground: onStart,
+        onBackground: iosBackground,
+      ),
+    );
+  }
+}
+
+Future<void> _showNotification(final String tile, final String body) async {
+  await flutterLocalNotificationsPlugin.show(
+    notificationId++,
+    tile,
+    body,
+    const NotificationDetails(
+      android: AndroidNotificationDetails(
+          'SwitchboxNotificationChannel', 'Switchbox Notification Channel',
+          channelDescription: 'Notification Channel for Switchbox',
+          importance: Importance.max,
+          priority: Priority.high),
+      iOS: DarwinNotificationDetails(),
+    ),
+  );
+}
+
+@pragma('vm:entry-point')
+void onStart(ServiceInstance service) {
   DartPluginRegistrant.ensureInitialized();
 
-  service.on("setAsForeground").listen((event) {
-    print("foreground ===============");
-  });
-
-  service.on("setAsBackground").listen((event) {
-    print("background ===============");
-  });
-
-  service.on("stopService").listen((event) {
-    service.stopSelf();
-  });
-
-  //display notification as service
-  Timer.periodic(const Duration(seconds: 2), (timer) {
-    flutterLocalPlugin.show(
-        90,
-        "Cool Service",
-        "Awsome ${DateTime.now()}",
-        const NotificationDetails(android:AndroidNotificationDetails("coding is life","coding is life service",ongoing: true,icon: "app_icon")));
-  });
-  print("Background service ${DateTime.now()}") ;
-
+  pollForNotifications();
 }
 
-//iosbackground
+void pollForNotifications() {
+  Stream.periodic(const Duration(seconds: 2)).asyncMap((_) async {
+    return "Notification message";
+  }).listen((notification) {
+    _showNotification("Notification title...",notification);
+  });
+}
+
 @pragma("vm:enry-point")
-Future<bool> iosBackground(ServiceInstance service)async{
+Future<bool> iosBackground(ServiceInstance service) async {
   WidgetsFlutterBinding.ensureInitialized();
   DartPluginRegistrant.ensureInitialized();
+
+  pollForNotifications();
 
   return true;
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
 
-  // This widget is the root of your application.
+class App extends StatelessWidget {
+  const App({super.key});
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+    return const MaterialApp(
+      home: MyHomePage(),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-
-  final String title;
+  const MyHomePage({super.key});
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  @override
-  Widget build(BuildContext context) {return Scaffold(
-    appBar: AppBar(
-      title: Text(widget.title),
-    ),
-    body: Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          //layout
-          const SizedBox(height: 200,),
-          ElevatedButton(onPressed: (){
-            FlutterBackgroundService().invoke("stopService");
-          }, child: const Text("stop service")),
-          ElevatedButton(onPressed: (){
-            FlutterBackgroundService().startService();
-          }, child: const Text("start service")),
-        ],
-      ),
-    ),
 
-  );
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Text(
+          'You should receive many notifications, even when closing the app.',
+          style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black),
+          textAlign: TextAlign.center,
+        ),
+      )
+    );
   }
 }
-
