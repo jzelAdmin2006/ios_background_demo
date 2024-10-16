@@ -71,14 +71,11 @@ Future<bool> iosBackgroundTask(ServiceInstance service) async {
 
 void pollForNotifications(ServiceInstance service) {
   service.on('stop').listen((event) {
-    print('Stopping background service...');
     service.stopSelf();
   });
-  print('starting polling...');
 
   Timer.periodic(const Duration(seconds: 30), (timer) async {
     // Customize this section with your notification logic
-    print('showing notification...');
     await flutterLocalNotificationsPlugin.show(
       notificationId++,
       'Background Notification',
