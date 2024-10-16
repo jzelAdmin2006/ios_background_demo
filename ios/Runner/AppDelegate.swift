@@ -2,8 +2,6 @@ import UIKit
 import Flutter
 import flutter_local_notifications
 
-import BackgroundTasks
-
 @UIApplicationMain
 @objc class AppDelegate: FlutterAppDelegate {
   override func application(
@@ -16,7 +14,7 @@ import BackgroundTasks
 
     if #available(iOS 13.0, *) {
       BGTaskScheduler.shared.register(forTaskWithIdentifier: "dev.flutter.background.refresh", using: nil) { task in
-        self.handleAppRefresh(task: task as! BGAppRefreshTask) // Cast von BGTask zu BGAppRefreshTask
+        self.handleAppRefresh(task: task as! BGAppRefreshTask) // Implementieren Sie Ihre Taskbehandlung
       }
     }
 
@@ -25,9 +23,6 @@ import BackgroundTasks
 
   @available(iOS 13.0, *)
   func handleAppRefresh(task: BGAppRefreshTask) {
-    task.expirationHandler = {
-      task.setTaskCompleted(success: false)
-    }
     task.setTaskCompleted(success: true)
   }
 
