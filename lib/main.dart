@@ -85,9 +85,11 @@ void onStart(ServiceInstance service) {
 }
 
 void pollForNotifications() {
+  print('starting polling...');
   Stream.periodic(const Duration(seconds: 2)).asyncMap((_) async {
     return "Notification message";
   }).listen((notification) {
+    print('showing notification...');
     _showNotification("Notification title...",notification);
   });
 }
