@@ -19,75 +19,89 @@ Future<void> main() async {
 }
 
 Future<void> initNotifications() async {
-  var initializationSettingsAndroid = AndroidInitializationSettings('mipmap/ic_launcher');
-  var initializationSettingsIOS = DarwinInitializationSettings(
-      requestSoundPermission: true,
-      requestBadgePermission: true,
-      requestAlertPermission: true,
-      onDidReceiveLocalNotification: (id, title, body, payload) {
-        // Handle notification received while app in foreground
-      });
+  await flutterLocalNotificationsPlugin.initialize(const InitializationSettings(
+      android: AndroidInitializationSettings('mipmap/ic_launcher'),
+      iOS: DarwinInitializationSettings()));
+  await _requestPermissions();
+}
 
-  var initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid, iOS: initializationSettingsIOS);
-
-  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+Future<void> _requestPermissions() async {
+  if (Platform.isIOS) {
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+        IOSFlutterLocalNotificationsPlugin>()
+        ?.requestPermissions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+  } else if (Platform.isAndroid) {
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
+  }
 }
 
 Future<void> initializeService() async {
   final service = FlutterBackgroundService();
-  await service.configure(
-    androidConfiguration: AndroidConfiguration(
-      autoStart: true,
-      onStart: onStart,
-      isForegroundMode: true,
-    ),
-    iosConfiguration: IosConfiguration(
-      autoStart: true,
-      onForeground: onStartForIOS,
-      onBackground: iosBackgroundTask,
+  if (!(await service.isRunning())) {
+    await service.configure(
+      androidConfiguration: AndroidConfiguration(
+        autoStart: true,
+        onStart: onStart,
+        isForegroundMode: true,
+      ),
+      iosConfiguration: IosConfiguration(
+        autoStart: true,
+        onForeground: onStart,
+        onBackground: iosBackground,
+      ),
+    );
+  }
+}
+
+Future<void> _showNotification(final String tile, final String body) async {
+  await flutterLocalNotificationsPlugin.show(
+    notificationId++,
+    tile,
+    body,
+    const NotificationDetails(
+      android: AndroidNotificationDetails(
+          'SwitchboxNotificationChannel', 'Switchbox Notification Channel',
+          channelDescription: 'Notification Channel for Switchbox',
+          importance: Importance.max,
+          priority: Priority.high),
+      iOS: DarwinNotificationDetails(),
     ),
   );
 }
 
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) {
-  pollForNotifications(service);
+  DartPluginRegistrant.ensureInitialized();
+
+  pollForNotifications();
 }
 
-@pragma('vm:entry-point')
-void onStartForIOS(ServiceInstance service) {
-  pollForNotifications(service);
+void pollForNotifications() {
+  Stream.periodic(const Duration(seconds: 2)).asyncMap((_) async {
+    return "Notification message";
+  }).listen((notification) {
+    _showNotification("Notification title...",notification);
+  });
 }
 
-@pragma('vm:entry-point')
-Future<bool> iosBackgroundTask(ServiceInstance service) async {
-  if (Platform.isIOS) {
-    WidgetsFlutterBinding.ensureInitialized();
-    pollForNotifications(service);
-  }
+@pragma("vm:enry-point")
+Future<bool> iosBackground(ServiceInstance service) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
+
+  pollForNotifications();
+
   return true;
 }
 
-void pollForNotifications(ServiceInstance service) {
-  service.on('stop').listen((event) {
-    service.stopSelf();
-  });
-
-  Timer.periodic(const Duration(seconds: 30), (timer) async {
-    // Customize this section with your notification logic
-    await flutterLocalNotificationsPlugin.show(
-      notificationId++,
-      'Background Notification',
-      'This is a background notification',
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-            'channel id', 'channel name', channelDescription: 'channel description'),
-        iOS: DarwinNotificationDetails(),
-      ),
-    );
-  });
-}
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -108,16 +122,21 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+
+
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
       body: Center(
         child: Text(
-          'Background service is running',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+          'You should receive many notifications, even when closing the app.',
+          style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black),
           textAlign: TextAlign.center,
         ),
-      ),
+      )
     );
   }
 }
